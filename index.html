@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tech Portfolio Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        img { max-width: 80%; height: auto; margin-top: 20px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>Hello from My Tech Portfolio Demo!</h1>
+    <p>This website demonstrates cloud-native automation using Docker, Kubernetes on Azure, and CI/CD with GitHub Actions.</p>
+    <p>Here's one of my artworks, served from Azure Blob Storage + CDN:</p>
+    <img src="https://beiportfolio.blob.core.windows.net/art-works/generated_00 (23).png" alt="My art">
+    <p>Last updated: <span id="last-updated"></span></p>
+
+    <script>
+        document.getElementById('last-updated').textContent = new Date().toLocaleString();
+    </script>
+</body>
+</html>

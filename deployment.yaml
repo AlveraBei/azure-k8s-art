@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tech-portfolio-deployment
+  labels:
+    app: tech-portfolio
+spec:
+  replicas: 1 # 我们只需要一个副本，节省成本
+  selector:
+    matchLabels:
+      app: tech-portfolio
+  template:
+    metadata:
+      labels:
+        app: tech-portfolio
+    spec:
+      containers:
+      - name: tech-portfolio-web
+        image: beiops/tech-portfolio-demo:v1.0.1 
+        ports:
+        - containerPort: 80 # 容器内部 Nginx 监听的端口
