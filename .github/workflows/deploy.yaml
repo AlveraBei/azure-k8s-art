@@ -41,7 +41,7 @@ jobs:
         creds: ${{ env.AZURE_CREDENTIALS }} # 使用之前设置的 AZURE_CREDENTIALS Secret
 
     - name: Get Kubeconfig for AKS # 步骤6: 获取 AKS 集群的 Kubeconfig
-      uses: azure/aks-get-credentials@v3
+      uses: azure/aks-set-context@v3
       with:
         resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
         cluster-name: ${{ env.AKS_CLUSTER_NAME }}
