@@ -48,6 +48,6 @@ jobs:
         admin: 'true' # 获取管理员凭据
 
     - name: Deploy to Kubernetes # 步骤7: 应用 Kubernetes 配置
-      run: 
+      run: |
         kubectl apply -f deployment.yaml
         kubectl apply -f service.yaml
