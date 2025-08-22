@@ -1,53 +1,80 @@
-name: Deploy to AKS
+name: Deploy to AKS on Azure
 
 on:
   push:
     branches:
-      - main # 当代码推送到 main 分支时触发此工作流
+      - main
 
 env:
-  AZURE_RESOURCE_GROUP: art-portfolio-rg      # <-- 资源组名
-  AKS_CLUSTER_NAME: tech-art-portfolio      # <-- AKS 集群名
-  DOCKER_IMAGE_NAME: tech-portfolio-demo   # <-- Docker 镜像名 (不含用户名和标签)
-  DOCKER_IMAGE_TAG: v1.0.1                # <-- 镜像标签 
-  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-  AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+  AZURE_RESOURCE_GROUP: art-portfolio-rg
+  ACR_NAME: myazureacrname # 替换为你的 ACR 名称
+  AKS_CLUSTER_NAME: tech-art-portfolio
+  DOCKER_IMAGE_NAME: tech-portfolio-demo
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest # 使用 GitHub 提供的最新 Ubuntu 虚拟机作为运行环境
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code # 步骤1: 检查代码到工作目录
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx # 步骤2: 设置 Docker Buildx 环境，支持多平台构建
-      uses: docker/setup-buildx-action@v3
-
-    - name: Login to Docker Hub # 步骤3: 登录 Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ env.DOCKER_USERNAME }}
-        password: ${{ env.DOCKER_PASSWORD }}
-
-    - name: Build and push Docker image # 步骤4: 构建并推送到 Docker Hub
-      run: |
-        docker buildx build --platform linux/amd64 -t ${{ env.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} . --push
-
-    - name: Login to Azure # 步骤5: 登录 Azure
+    - name: Login to Azure and ACR
       uses: azure/login@v1
       with:
-        creds: ${{ env.AZURE_CREDENTIALS }} # 使用之前设置的 AZURE_CREDENTIALS Secret
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - run: |
+        az acr login --name ${{ env.ACR_NAME }}
 
-    - name: Get Kubeconfig for AKS # 步骤6: 获取 AKS 集群的 Kubeconfig
+    # 步骤1: 构建并推送到 ACR - 后端
+    - name: Build and push backend Docker image to ACR
+      run: |
+        cd backend
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME }}:backend-latest .
+        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME }}:backend-latest
+        
+    # 步骤2: 构建并推送到 ACR - 前端
+    - name: Build and push frontend Docker image to ACR
+      run: |
+        cd frontend
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME }}:frontend-latest .
+        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME }}:frontend-latest
+
+    # 步骤3: 获取数据库连接字符串
+    - name: Get Database Connection String from Key Vault
+      uses: azure/keyvault-get-secrets@v1
+      with:
+        keyvault: 'tech-portfolio-kv' # 替换为你的 Key Vault 名称
+        secrets: 'db-connection-string'
+      id: db_secrets
+
+    # 步骤4: 运行数据库迁移
+    - name: Run database migrations
+      env:
+        DATABASE_URL: ${{ steps.db_secrets.outputs.db-connection-string }}
+      run: |
+        # 请确保你已安装了 psql 命令行工具，或者使用一个包含它的 Docker 镜像
+        echo "Running database migrations..."
+        echo $DATABASE_URL
+        # 由于我们没有专用的数据库迁移工具，这里我们直接使用 psql
+        psql $DATABASE_URL -f ./db/migrations/create_artworks_table.sql
+        echo "Database migrations completed successfully."
+    
+    # 步骤5: 获取 AKS 集群的 Kubeconfig
+    - name: Get Kubeconfig for AKS
       uses: azure/aks-set-context@v3
       with:
         resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
         cluster-name: ${{ env.AKS_CLUSTER_NAME }}
-        admin: 'true' # 获取管理员凭据
+        admin: 'true'
 
-    - name: Deploy to Kubernetes # 步骤7: 应用 Kubernetes 配置
+    # 步骤6: 部署到 Kubernetes
+    - name: Deploy to Kubernetes
       run: |
-        kubectl apply -f deployment.yaml
-        kubectl apply -f service.yaml
+        # 动态替换 Kubernetes 配置文件中的镜像名称
+        sed -i 's|tech-portfolio-demo:backend-latest|${{ env.ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME }}:backend-latest|g' ./k8s/backend-deployment.yaml
+        sed -i 's|tech-portfolio-demo:frontend-latest|${{ env.ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME }}:frontend-latest|g' ./k8s/frontend-deployment.yaml
+
+        # 应用 Kubernetes 配置
+        kubectl apply -f ./k8s/
